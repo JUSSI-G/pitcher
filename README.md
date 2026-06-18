@@ -1,2 +1,42 @@
-# pitcher
-Pitch finding app.
+# Pitcher
+
+A web app for checking football pitch availability in Jyväskylä. Scrapes the city's [eTimmi booking system](https://etimmi.jyvaskyla.fi/WebTimmi) and shows a weekly calendar of bookings across all outdoor football pitches, sorted by distance from your location.
+
+## Features
+
+- Weekly calendar view of all known football pitches in Jyväskylä
+- Navigate up to 4 weeks ahead or 1 week back
+- Sort pitches by distance using browser geolocation
+- 30-minute server-side cache to avoid hammering the booking system
+
+## Setup
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Run
+
+```bash
+flask run
+```
+
+The app is available at `http://localhost:5000`.
+
+For production, use gunicorn:
+
+```bash
+gunicorn app:app
+```
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `app.py` | Flask app and booking fetcher |
+| `pitch_scraper.py` | Standalone scraper script (prints to terminal) |
+| `templates/index.html` | Frontend HTML |
+| `static/app.js` | Frontend logic |
+| `static/style.css` | Styles |
