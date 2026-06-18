@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitcher — Jyväskylä</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Pitcher<span class="dot">.</span></h1>
+    <div class="subtitle">Jyväskylä football pitches</div>
+  </div>
+  <div class="updated" id="updatedAt"></div>
+</header>
+<div class="main-tabs">
+  <button class="main-tab active" onclick="switchTab('week', this)">📅 This week</button>
+  <button class="main-tab" onclick="switchTab('find', this)">🔍 Find a slot</button>
+</div>
+<!-- WEEK VIEW -->
+<div id="weekNav" class="week-nav" style="display:none;"></div>
+<div id="weekView">
+  <div class="loading"><div class="spinner"></div> Loading bookings…</div>
+</div>
+<!-- FIND VIEW -->
+<div id="findView" style="display:none;">
+  <div class="find-panel">
+    <div class="find-hero">
+      <button class="btn-now" onclick="searchNow()">
+        <span class="icon">⚡</span> Free right now
+      </button>
+    </div>
+    <div class="divider">or pick a time</div>
+    <div class="find-form">
+      <div>
+        <div class="field-label">Day</div>
+        <div class="pick-days" id="pickDays"></div>
+      </div>
+      <div>
+        <div class="field-label">Time</div>
+        <div class="time-row">
+          <input type="range" id="timeSlider" min="6" max="22" step="0.25" value="15"
+            oninput="onSlider(this)">
+          <div class="time-display" id="timeDisplay">15:00</div>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Sort by</div>
+        <div class="loc-row">
+          <button class="btn-loc" id="locBtn" onclick="toggleLocation()">
+            📍 Use my location
+          </button>
+          <span class="loc-status" id="locStatus"></span>
+        </div>
+      </div>
+      <button class="btn-search" onclick="runSearch()">Show free pitches →</button>
+    </div>
+    <div class="results" id="results" style="display:none;">
+      <div class="search-bar">
+        <input class="search-input" type="text" id="findSearchInput"
+          placeholder="Hipposhalli…"
+          oninput="findSearch = this.value.toLowerCase(); runSearch()">
+      </div>
+      <div id="resultsBody"></div>
+    </div>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

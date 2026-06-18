@@ -27,12 +27,7 @@ def step1_login():
     return response.status_code == 200
 
 
-# A fresh guest login starts with nothing selected (getCalendarSetup
-# returns empty resourceIds until something picks a category, and there's
-# no endpoint that lists categories/pitches without already knowing an id).
-# These IDs were verified directly against a real getRoomPartsForCalendarAjax
-# response, so they're known-good, just not re-discoverable from a blank session.
-KNOWN_FOOTBALL_PITCH_IDS = [
+PITCH_ID = [
     7963, 7965, 7966, 7982, 8034, 8007, 8008, 8005, 4582, 4581, 4580, 7627,
     8063, 6443, 6444, 6176, 8045, 8060, 7943, 4593, 4594, 4586, 4587, 4591,
     7416, 8052, 8053, 8050, 4576, 4578, 4579, 4574, 4538, 4539, 4537, 8058,
@@ -41,13 +36,13 @@ KNOWN_FOOTBALL_PITCH_IDS = [
 
 
 def step2_find_pitches():
-    print("Looking up names for the known football pitches...")
+    print("Looking up names for the PITCH_ID football pitches...")
 
     url = URL + "/getRoomPartsForCalendarAjax.do"
     response = session.get(url, params={
         "actionCode": "getRoomPartInfos",
         "type": 0,
-        "ids": ",".join(str(i) for i in KNOWN_FOOTBALL_PITCH_IDS),
+        "ids": ",".join(str(i) for i in PITCH_ID),
         "_": int(time.time() * 1000),
     })
     print("  DEBUG status code:", response.status_code)
@@ -57,7 +52,7 @@ def step2_find_pitches():
     for room in rooms:
         pitch_id = room.get("roomPartId")
         pitch_names[pitch_id] = {
-            "name": room.get("roomPartName", "Unknown pitch"),
+            "name": room.get("roomPartName", "UnPITCH_ID pitch"),
             "building": room.get("buildingName", ""),
         }
     print("  found", len(pitch_names), "pitches")
@@ -166,7 +161,7 @@ def show_bookings(bookings, pitch_names):
     for pitch_id, pitch_bookings in grouped.items():
         info = pitch_names.get(pitch_id, {"name": "", "building": ""})
 
-        # Skip pitches with no name (unknown/non-football facilities)
+        # Skip pitches with no name (unPITCH_ID/non-football facilities)
         if not info["name"] or info["name"].startswith("Pitch "):
             continue
 
