@@ -139,8 +139,21 @@ def extract_label(event_text_field):
     return " ".join(parts) or "Booked"
 
 
+def is_filler(booking):
+    """Returns True for overnight 'closed hours' entries that exist only to
+    block out unavailable time — recognisable as midnight-to-midnight or
+    midnight-to-early-morning / late-night-to-midnight with no real label."""
+    start_ms = booking.get("startDateInMills", 0)
+    end_ms = booking.get("endDateInMills", 0)
+    start = datetime.fromtimestamp(start_ms / 1000)
+    end = datetime.fromtimestamp(end_ms / 1000)
+    label = extract_label(booking.get("eventTextField", []))
+    midnight_start = start.hour == 0 and start.minute == 0
+    midnight_end = end.hour == 0 and end.minute == 0
+    return label == "Booked" and (midnight_start or midnight_end)
+
+
 def show_bookings(bookings, pitch_names):
-    """Print everything in a way a human can actually read."""
     print("\n--- This week's bookings ---")
 
     grouped = {}
@@ -151,10 +164,20 @@ def show_bookings(bookings, pitch_names):
         grouped[pitch_id].append(booking)
 
     for pitch_id, pitch_bookings in grouped.items():
-        info = pitch_names.get(pitch_id, {"name": f"Pitch {pitch_id}", "building": ""})
-        print(f"\n{info['name']} ({info['building']})")
+        info = pitch_names.get(pitch_id, {"name": "", "building": ""})
 
-        for booking in pitch_bookings:
+        # Skip pitches with no name (unknown/non-football facilities)
+        if not info["name"] or info["name"].startswith("Pitch "):
+            continue
+
+        # Filter out overnight filler entries
+        real_bookings = [b for b in pitch_bookings if not is_filler(b)]
+        if not real_bookings:
+            continue
+
+        print(f"\n{info['name']} ({info['building']})")
+        real_bookings.sort(key=lambda b: b["startDateInMills"])
+        for booking in real_bookings:
             start = datetime.fromtimestamp(booking["startDateInMills"] / 1000)
             end = datetime.fromtimestamp(booking["endDateInMills"] / 1000)
             label = extract_label(booking.get("eventTextField", []))
