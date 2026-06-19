@@ -32,9 +32,9 @@ git push
 
 Render picks up the new commit and redeploys automatically (usually under a minute).
 
-## Live local mode
+## Live mode
 
-To run the app with real-time scraping on your own machine:
+To run the app with real-time scraping:
 
 ```bash
 PITCHER_LIVE=true python3 app.py   # macOS / Linux
@@ -44,16 +44,8 @@ PITCHER_LIVE=true python3 app.py   # macOS / Linux
 set PITCHER_LIVE=true && python app.py
 ```
 
-Then open `http://localhost:5000`. Each uncached request fetches fresh data from eTimmi.
+Each uncached request fetches fresh data from eTimmi.
 
-## Deploy to Render
-
-1. Push the repo to GitHub.
-2. In Render, click **New → Web Service** and connect the repo.
-3. Render reads `render.yaml` automatically — no manual configuration needed.
-4. Click **Deploy**.
-
-The free tier spins down after inactivity; the first request after sleep triggers a cold start (~30 s). Commit a fresh `static/bookings.json` whenever you want updated data on the live site.
 
 ## Files
 
