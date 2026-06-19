@@ -32,6 +32,10 @@ git push
 
 Render picks up the new commit and redeploys automatically (usually under a minute).
 
+Currently Deployed on Render:
+
+The free tier spins down after inactivity; the first request after sleep triggers a cold start (~30 s). Commit a fresh `static/bookings.json` whenever you want updated data on the live site.
+
 ## Live mode
 
 To run the app with real-time scraping:
