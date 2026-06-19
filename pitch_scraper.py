@@ -93,9 +93,9 @@ def is_filler(start_ms, end_ms, label):
     )
 
 
-def fetch_week(pitches):
+def fetch_week(pitches, week_offset=0):
     today  = datetime.now()
-    monday = (today - timedelta(days=today.weekday())).replace(
+    monday = (today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)).replace(
         hour=0, minute=0, second=0, microsecond=0)
 
     bookings = []
@@ -177,8 +177,10 @@ if __name__ == "__main__":
         raise SystemExit(1)
     print(f"  found {len(pitches)} pitches")
 
-    print("Fetching bookings (Mon–Sun)...")
-    bookings = fetch_week(pitches)
+    print("Fetching bookings (this week)...")
+    bookings = fetch_week(pitches, 0)
+    print("Fetching bookings (next week)...")
+    bookings += fetch_week(pitches, 1)
 
     print_bookings(pitches, bookings)
 

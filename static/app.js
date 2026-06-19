@@ -353,7 +353,7 @@ function toggleLocation() {
       userLng = pos.coords.longitude;
       document.getElementById("locBtn").classList.add("active");
       document.getElementById("locStatus").textContent =
-        `✓ ${userLat.toFixed(4)}°N, ${userLng.toFixed(4)}°E`;
+        `${userLat.toFixed(4)}°N, ${userLng.toFixed(4)}°E`;
     },
     () => { document.getElementById("locStatus").textContent = "Location unavailable"; },
     { enableHighAccuracy: true, timeout: 10000 }

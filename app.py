@@ -159,12 +159,19 @@ def get_cached_data(week_offset=0):
     return _cache[week_offset]["data"]
 
 
-def get_static_data():
+def get_static_data(week_offset=0):
     try:
         with open(STATIC_FILE, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except FileNotFoundError:
         return None
+    today = datetime.now()
+    monday = (today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    start_ms = int(monday.timestamp() * 1000)
+    end_ms = start_ms + 7 * 24 * 3600 * 1000
+    filtered = [b for b in data["bookings"] if start_ms <= b["startMs"] < end_ms]
+    return {**data, "bookings": filtered, "weekOffset": week_offset}
 
 
 @app.route("/")
@@ -186,7 +193,7 @@ def bookings():
             "weekOffset": week_offset,
         })
 
-    data = get_static_data()
+    data = get_static_data(week_offset)
     if data is None:
         return jsonify({"error": "No data. Run pitch_scraper.py locally and push bookings.json"}), 503
     return jsonify(data)

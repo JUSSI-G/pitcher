@@ -22,8 +22,8 @@
   <div class="updated" id="updatedAt"></div>
 </header>
 <div class="main-tabs">
-  <button class="main-tab active" onclick="switchTab('week', this)">📅 This week</button>
-  <button class="main-tab" onclick="switchTab('find', this)">🔍 Find a slot</button>
+  <button class="main-tab active" onclick="switchTab('week', this)">Weekly</button>
+  <button class="main-tab" onclick="switchTab('find', this)">Find a slot</button>
 </div>
 <div id="weekNav" class="week-nav" style="display:none;"></div>
 <div id="weekView">
@@ -32,9 +32,7 @@
 <div id="findView" style="display:none;">
   <div class="find-panel">
     <div class="find-hero">
-      <button class="btn-now" onclick="searchNow()">
-        <span class="icon">⚡</span> Free right now
-      </button>
+      <button class="btn-now" onclick="searchNow()">Free right now</button>
     </div>
     <div class="divider">or pick a time</div>
     <div class="find-form">
@@ -54,7 +52,7 @@
         <div class="field-label">Sort by</div>
         <div class="loc-row">
           <button class="btn-loc" id="locBtn" onclick="toggleLocation()">
-            📍 Use my location
+            Use my location
           </button>
           <span class="loc-status" id="locStatus"></span>
         </div>
