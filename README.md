@@ -1,13 +1,14 @@
 # Pitcher
 
-A web app for checking football pitch availability in Jyväskylä. Scrapes the city's [eTimmi booking system](https://etimmi.jyvaskyla.fi/WebTimmi) and shows a weekly calendar of bookings across all outdoor football pitches, sorted by distance from your location.
+Football pitch availability for Jyväskylä. Shows weekly bookings across all outdoor pitches with a slot-finder and distance sorting.
 
-## Features
+Data comes from the city's [eTimmi booking system](https://etimmi.jyvaskyla.fi/WebTimmi). The eTimmi server blocks cloud IP ranges, so live scraping only works from a personal machine — the deployed app serves a static snapshot that you push manually.
 
-- Weekly calendar view of all known football pitches in Jyväskylä
-- Navigate up to 4 weeks ahead or 1 week back
-- Sort pitches by distance using browser geolocation
-- 30-minute server-side cache to avoid hammering the booking system
+## How it works
+
+**Static mode (default)** — `app.py` serves `static/bookings.json`, a snapshot you generate locally and commit. This is the only mode that works on Render.
+
+**Live mode** — Set `PITCHER_LIVE=true` before starting the server. The app scrapes eTimmi directly on each request, with a 30-minute in-process cache. Only works on a machine that can reach eTimmi.
 
 ## Setup
 
@@ -18,33 +19,52 @@ source venv/bin/activate    # macOS / Linux
 pip install -r requirements.txt
 ```
 
-## Run
+## Updating the data
+
+Run the scraper locally, then push the snapshot:
 
 ```bash
-flask run
+python3 pitch_scraper.py
+git add static/bookings.json
+git commit -m "update bookings"
+git push
 ```
 
-The app is available at `http://localhost:5000`.
+Render picks up the new commit and redeploys automatically (usually under a minute).
+
+## Live local mode
+
+To run the app with real-time scraping on your own machine:
+
+```bash
+PITCHER_LIVE=true python3 app.py   # macOS / Linux
+```
+
+```cmd
+set PITCHER_LIVE=true && python app.py
+```
+
+Then open `http://localhost:5000`. Each uncached request fetches fresh data from eTimmi.
 
 ## Deploy to Render
 
 1. Push the repo to GitHub.
 2. In Render, click **New → Web Service** and connect the repo.
 3. Render reads `render.yaml` automatically — no manual configuration needed.
-4. Click **Deploy**. The service will be live at `https://pitcher.onrender.com` (or your chosen name).
+4. Click **Deploy**.
 
-The free tier spins down after inactivity; the first request after sleep triggers a cold start.
+The free tier spins down after inactivity; the first request after sleep triggers a cold start (~30 s). Commit a fresh `static/bookings.json` whenever you want updated data on the live site.
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `app.py` | Flask app and booking fetcher |
-| `pitch_scraper.py` | Standalone scraper script (prints to terminal) |
+| `app.py` | Flask app — static and live modes |
+| `pitch_scraper.py` | Scrapes eTimmi, saves `static/bookings.json` |
 | `templates/index.html` | Frontend HTML |
 | `static/app.js` | Frontend logic |
 | `static/style.css` | Styles |
-| `static/manifest.json` | Web app manifest (installable PWA) |
-| `static/icon.svg` | App icon (pitch top-down view) |
+| `static/manifest.json` | Web app manifest (PWA) |
+| `static/icon.svg` | App icon |
 | `render.yaml` | Render deployment config |
 | `runtime.txt` | Python version pin |

@@ -99,7 +99,9 @@ function haversine(lat1, lng1, lat2, lng2) {
 
 async function loadData() {
   const res = await fetch(`/api/bookings?week=${weekOffset}`);
-  allData = await res.json();
+  const data = await res.json();
+  if (data.error) { const e = new Error(data.error); e.noData = true; throw e; }
+  allData = data;
   document.getElementById("updatedAt").textContent =
     "Updated " + new Date(allData.fetchedAt).toLocaleTimeString("fi-FI", {
       timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit"
@@ -127,6 +129,7 @@ async function loadFindData() {
   const mergeWeek = async (offset) => {
     const res = await fetch(`/api/bookings?week=${offset}`);
     const data = await res.json();
+    if (data.error) { const e = new Error(data.error); e.noData = true; throw e; }
     if (!allData) allData = data;
     for (const b of data.bookings) {
       const dk = localDateKey(b.startMs);
@@ -487,11 +490,11 @@ function showPitchSchedule(pid, dateKey) {
   document.body.appendChild(overlay);
 }
 
-loadData().catch(() => {
+loadData().catch(err => {
   document.getElementById("weekView").innerHTML =
-    '<div class="loading">Failed to load — try refreshing.</div>';
+    `<div class="loading">${err.noData ? "Data not loaded. Update locally!" : "Failed to load — try refreshing."}</div>`;
 });
-loadFindData().catch(() => {
+loadFindData().catch(err => {
   document.getElementById("pickDays").innerHTML =
-    '<span style="color:var(--muted-2);font-size:12px;">Could not load dates — try refreshing.</span>';
+    `<span style="color:var(--muted-2);font-size:12px;">${err.noData ? "Data not loaded." : "Could not load dates — try refreshing."}</span>`;
 });

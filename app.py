@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import requests
@@ -39,6 +40,7 @@ BUILDING_COORDS = {
 
 _cache = {}
 CACHE_TTL = 30 * 60
+STATIC_FILE = os.path.join(os.path.dirname(__file__), "static", "bookings.json")
 
 
 def get_session():
@@ -157,6 +159,14 @@ def get_cached_data(week_offset=0):
     return _cache[week_offset]["data"]
 
 
+def get_static_data():
+    try:
+        with open(STATIC_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -166,25 +176,21 @@ def index():
 def bookings():
     week_offset = int(request.args.get("week", 0))
     week_offset = max(-1, min(4, week_offset))
-    data = get_cached_data(week_offset)
-    return jsonify({
-        "pitches":    {str(k): v for k, v in data["pitches"].items()},
-        "bookings":   [{**b, "pitchId": str(b["pitchId"])} for b in data["bookings"]],
-        "fetchedAt":  data["fetchedAt"],
-        "weekOffset": week_offset,
-    })
 
-@app.route("/ping")
-def ping():
-    try:
-        r = requests.get(
-            "https://etimmi.jyvaskyla.fi/WebTimmi/menuAction.do",
-            params={"logicalForward": "weekView"},
-            timeout=10
-        )
-        return f"OK — status {r.status_code}"
-    except Exception as e:
-        return f"FAILED — {e}"
+    if os.environ.get("PITCHER_LIVE", "").lower() == "true":
+        data = get_cached_data(week_offset)
+        return jsonify({
+            "pitches":    {str(k): v for k, v in data["pitches"].items()},
+            "bookings":   [{**b, "pitchId": str(b["pitchId"])} for b in data["bookings"]],
+            "fetchedAt":  data["fetchedAt"],
+            "weekOffset": week_offset,
+        })
+
+    data = get_static_data()
+    if data is None:
+        return jsonify({"error": "No data. Run pitch_scraper.py locally and push bookings.json"}), 503
+    return jsonify(data)
+
     
 if __name__ == "__main__":
     app.run(debug=True)
