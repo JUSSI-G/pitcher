@@ -174,6 +174,17 @@ def bookings():
         "weekOffset": week_offset,
     })
 
-
+@app.route("/ping")
+def ping():
+    try:
+        r = requests.get(
+            "https://etimmi.jyvaskyla.fi/WebTimmi/menuAction.do",
+            params={"logicalForward": "weekView"},
+            timeout=10
+        )
+        return f"OK — status {r.status_code}"
+    except Exception as e:
+        return f"FAILED — {e}"
+    
 if __name__ == "__main__":
     app.run(debug=True)
