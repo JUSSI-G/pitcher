@@ -6,9 +6,9 @@ Data comes from the city's [eTimmi booking system](https://etimmi.jyvaskyla.fi/W
 
 ## How it works
 
-**Static mode (default)** — `app.py` serves `static/bookings.json`, a snapshot you generate locally and commit. This is the only mode that works on Render.
+**Static mode (default)**: `app.py` serves `static/bookings.json`, a snapshot you generate locally and commit. This is the only mode that works on Render.
 
-**Live mode** — Set `PITCHER_LIVE=true` before starting the server. The app scrapes eTimmi directly on each request, with a 30-minute in-process cache. Only works on a machine that can reach eTimmi.
+**Live mode**: Set `PITCHER_LIVE=true` before starting the server. The app scrapes eTimmi directly on each request, with a 30-minute in-process cache. Only works on a machine that can reach eTimmi.
 
 ## Setup
 
