@@ -1,0 +1,19 @@
+{
+  "name": "Pitcher",
+  "short_name": "Pitcher",
+  "description": "Football pitch availability in Jyväskylä",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a3d2b",
+  "theme_color": "#1a3d2b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

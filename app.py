@@ -2,7 +2,7 @@ import time
 import json
 import requests
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
@@ -15,8 +15,6 @@ KNOWN_FOOTBALL_PITCH_IDS = [
     7762, 7763, 7761, 7764, 7765, 7766, 7768, 7769, 7777, 7770,
 ]
 
-# Approximate WGS84 coordinates per building name.
-# Used to sort search results by distance from user.
 BUILDING_COORDS = {
     "Halssilan liikuntapuisto":    (62.237, 25.719),
     "Harjun stadion":              (62.242, 25.742),
@@ -166,9 +164,8 @@ def index():
 
 @app.route("/api/bookings")
 def bookings():
-    from flask import request
     week_offset = int(request.args.get("week", 0))
-    week_offset = max(-1, min(4, week_offset))  # clamp to -1..+4 weeks
+    week_offset = max(-1, min(4, week_offset))
     data = get_cached_data(week_offset)
     return jsonify({
         "pitches":    {str(k): v for k, v in data["pitches"].items()},

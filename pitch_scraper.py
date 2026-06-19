@@ -60,8 +60,6 @@ def step2_find_pitches():
 
 
 def select_day(pitch_ids, monday, day_index):
-    """Tell the server: 'show me just this one day, for these pitches.'
-    day_index: 0=Monday, 1=Tuesday, ... 6=Sunday."""
     days_selected = [0, 0, 0, 0, 0, 0, 0]
     days_selected[day_index] = 1
 
@@ -93,8 +91,6 @@ def get_bookings():
 
 
 def fetch_whole_week(pitch_ids):
-    """Loop one day at a time, since the calendar's single-day view ignores
-    extra flags in daysSelected when more than one is set at once."""
     today = datetime.now()
     monday = today - timedelta(days=today.weekday())
     monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -118,7 +114,7 @@ def fetch_whole_week(pitch_ids):
             all_bookings.append(b)
             new_count += 1
         print(f"  found {new_count} bookings")
-        time.sleep(0.3)  # be polite, no need to hammer the server
+        time.sleep(0.3)
 
     return all_bookings
 
@@ -135,9 +131,6 @@ def extract_label(event_text_field):
 
 
 def is_filler(booking):
-    """Returns True for overnight 'closed hours' entries that exist only to
-    block out unavailable time — recognisable as midnight-to-midnight or
-    midnight-to-early-morning / late-night-to-midnight with no real label."""
     start_ms = booking.get("startDateInMills", 0)
     end_ms = booking.get("endDateInMills", 0)
     start = datetime.fromtimestamp(start_ms / 1000)
@@ -161,11 +154,9 @@ def show_bookings(bookings, pitch_names):
     for pitch_id, pitch_bookings in grouped.items():
         info = pitch_names.get(pitch_id, {"name": "", "building": ""})
 
-        # Skip pitches with no name (unPITCH_ID/non-football facilities)
         if not info["name"] or info["name"].startswith("Pitch "):
             continue
 
-        # Filter out overnight filler entries
         real_bookings = [b for b in pitch_bookings if not is_filler(b)]
         if not real_bookings:
             continue

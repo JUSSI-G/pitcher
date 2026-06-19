@@ -13,7 +13,8 @@ A web app for checking football pitch availability in Jyväskylä. Scrapes the c
 
 ```bash
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate    # macOS / Linux
+# venv\Scripts\activate     # Windows
 pip install -r requirements.txt
 ```
 
@@ -25,11 +26,14 @@ flask run
 
 The app is available at `http://localhost:5000`.
 
-For production, use gunicorn:
+## Deploy to Render
 
-```bash
-gunicorn app:app
-```
+1. Push the repo to GitHub.
+2. In Render, click **New → Web Service** and connect the repo.
+3. Render reads `render.yaml` automatically — no manual configuration needed.
+4. Click **Deploy**. The service will be live at `https://pitcher.onrender.com` (or your chosen name).
+
+The free tier spins down after inactivity; the first request after sleep triggers a cold start.
 
 ## Files
 
@@ -40,3 +44,7 @@ gunicorn app:app
 | `templates/index.html` | Frontend HTML |
 | `static/app.js` | Frontend logic |
 | `static/style.css` | Styles |
+| `static/manifest.json` | Web app manifest (installable PWA) |
+| `static/icon.svg` | App icon (pitch top-down view) |
+| `render.yaml` | Render deployment config |
+| `runtime.txt` | Python version pin |

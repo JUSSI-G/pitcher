@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pitcher — Jyväskylä</title>
+<meta name="theme-color" content="#1a3d2b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pitcher">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -18,12 +25,10 @@
   <button class="main-tab active" onclick="switchTab('week', this)">📅 This week</button>
   <button class="main-tab" onclick="switchTab('find', this)">🔍 Find a slot</button>
 </div>
-<!-- WEEK VIEW -->
 <div id="weekNav" class="week-nav" style="display:none;"></div>
 <div id="weekView">
   <div class="loading"><div class="spinner"></div> Loading bookings…</div>
 </div>
-<!-- FIND VIEW -->
 <div id="findView" style="display:none;">
   <div class="find-panel">
     <div class="find-hero">

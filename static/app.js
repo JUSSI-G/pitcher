@@ -9,6 +9,51 @@ let weekOffset = 0;
 let weekSearch = "";
 let findSearch = "";
 
+const PITCH_GROUPS = [
+  { full: "7963", halves: ["7965", "7966"] },
+  { full: "8005", halves: ["8007", "8008"] },
+  { full: "4580", halves: ["4581", "4582"] },
+  { full: "6176", halves: ["6443", "6444"] },
+  { full: "4586", halves: ["4593", "4594"] },
+  { full: "8050", halves: ["8052", "8053"] },
+  { full: "4576", halves: ["4578", "4579"] },
+  { full: "4537", halves: ["4538", "4539"] },
+  { full: "7761", halves: ["7762", "7763"] },
+  { full: "7764", halves: ["7765", "7766"] },
+  { full: "7777", halves: ["7769", "7770"] },
+];
+
+const PID_GROUP = {};
+for (const g of PITCH_GROUPS) {
+  PID_GROUP[g.full] = { ...g, role: "full" };
+  for (const h of g.halves) PID_GROUP[h] = { ...g, role: "half" };
+}
+
+function effectiveBookings(pid, dayData) {
+  const own = dayData[pid] || [];
+  const group = PID_GROUP[pid];
+  if (!group) return own;
+
+  if (group.role === "half") {
+    const fullBookings = dayData[group.full] || [];
+    return mergeBookings(own, fullBookings);
+  }
+
+  if (group.role === "full") {
+    const halfBookings = group.halves.flatMap(h => dayData[h] || []);
+    return mergeBookings(own, halfBookings);
+  }
+
+  return own;
+}
+
+function mergeBookings(a, b) {
+  const seen = new Set(a.map(x => `${x.startHour}-${x.endHour}`));
+  const extra = b.filter(x => !seen.has(`${x.startHour}-${x.endHour}`));
+  return [...a, ...extra];
+}
+
+
 function localHour(ms) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit", hour12: false
@@ -82,10 +127,10 @@ async function loadFindData() {
   const mergeWeek = async (offset) => {
     const res = await fetch(`/api/bookings?week=${offset}`);
     const data = await res.json();
-    if (!allData) allData = data;  // use as pitches reference if not set yet
+    if (!allData) allData = data;
     for (const b of data.bookings) {
       const dk = localDateKey(b.startMs);
-      if (dk < todayKey) continue;  // skip past days
+      if (dk < todayKey) continue;
       if (!merged[dk]) merged[dk] = {};
       if (!merged[dk][b.pitchId]) merged[dk][b.pitchId] = [];
       merged[dk][b.pitchId].push({
@@ -107,7 +152,7 @@ async function loadFindData() {
 function weekLabel() {
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - now.getDay() + 1 + weekOffset * 7);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   const fmt = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
@@ -197,10 +242,11 @@ function renderSummary() {
   const nowH = localHour(Date.now());
   let html = "";
   if (isToday) {
-    const freeNow = ids.filter(id =>
-      nowH >= DAY_START && nowH < DAY_END &&
-      !dayData[id].some(b => b.startHour <= nowH && b.endHour > nowH)
-    ).length;
+    const freeNow = ids.filter(id => {
+      const bookings = effectiveBookings(id, dayData);
+      return nowH >= DAY_START && nowH < DAY_END &&
+        !bookings.some(b => b.startHour <= nowH && b.endHour > nowH);
+    }).length;
     html = `<div class="stat"><div class="n">${freeNow}/${ids.length}</div><div class="l">free right now</div></div>`;
   }
   document.getElementById("summary").innerHTML = html;
@@ -224,8 +270,9 @@ function renderBoard() {
   for (const [pid, info] of Object.entries(allData.pitches)) {
     if (!dayData[pid]) continue;
     if (weekSearch && !(info.name + " " + info.building).toLowerCase().includes(weekSearch)) continue;
+    const bookings = effectiveBookings(pid, dayData);
     if (!byBuilding[info.building]) byBuilding[info.building] = [];
-    byBuilding[info.building].push({ pid, info, bookings: dayData[pid], free: freeMinutes(dayData[pid]) });
+    byBuilding[info.building].push({ pid, info, bookings, free: freeMinutes(bookings) });
   }
   for (const [building, pitches] of Object.entries(byBuilding)) {
     pitches.sort((a, b) => b.free - a.free);
@@ -302,9 +349,11 @@ function toggleLocation() {
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
       document.getElementById("locBtn").classList.add("active");
-      document.getElementById("locStatus").textContent = "Location found ✓";
+      document.getElementById("locStatus").textContent =
+        `✓ ${userLat.toFixed(4)}°N, ${userLng.toFixed(4)}°E`;
     },
-    () => { document.getElementById("locStatus").textContent = "Location unavailable"; }
+    () => { document.getElementById("locStatus").textContent = "Location unavailable"; },
+    { enableHighAccuracy: true, timeout: 10000 }
   );
 }
 function searchNow() {
@@ -331,7 +380,7 @@ function showResults(dateKey, targetHour) {
   const entries = [];
   for (const [pid, info] of Object.entries(allData.pitches)) {
     if (findSearch && !(info.name + " " + info.building).toLowerCase().includes(findSearch)) continue;
-    const bookings = dayData[pid] || [];
+    const bookings = effectiveBookings(pid, dayData);
     const slots = freeSlots(bookings);
     const freeNow = !bookings.some(b => b.startHour <= targetHour && b.endHour > targetHour)
       && targetHour >= DAY_START && targetHour < DAY_END;
@@ -363,7 +412,8 @@ function showResults(dateKey, targetHour) {
         return `<span class="slot-pill${covers ? " highlight" : ""}">${fmtHourMin(s.start)}–${fmtHourMin(s.end)}</span>`;
       }).join("");
       return `
-        <div class="result-card${entry.freeNow ? " is-free" : ""}">
+        <div class="result-card${entry.freeNow ? " is-free" : ""}" style="cursor:pointer"
+          onclick="showPitchSchedule('${entry.pid}', '${dateKey}')">
           ${dist}
           <div class="result-body">
             <div class="result-name">${entry.info.name}</div>
@@ -374,6 +424,69 @@ function showResults(dateKey, targetHour) {
     }).join("") || '<div class="no-results">No pitches free around that time.</div>'}
   `;
 }
+
+function showPitchSchedule(pid, dateKey) {
+  const info = allData.pitches[pid];
+  const dayData = findData[dateKey] || {};
+  const bookings = effectiveBookings(pid, dayData);
+  const slots = freeSlots(bookings);
+  const dateLabel = new Date(dateKey + "T12:00:00Z").toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long"
+  });
+
+  const timeline = [];
+  let cursor = DAY_START;
+  const sorted = [...bookings].sort((a, b) => a.startHour - b.startHour);
+  for (const b of sorted) {
+    if (b.startHour > cursor) timeline.push({ type: "free", start: cursor, end: b.startHour });
+    timeline.push({ type: "booked", start: b.startHour, end: b.endHour, label: b.label });
+    cursor = Math.max(cursor, b.endHour);
+  }
+  if (DAY_END > cursor) timeline.push({ type: "free", start: cursor, end: DAY_END });
+
+  const slotRows = timeline.map(s => {
+    const timeStr = `${fmtHourMin(s.start)} – ${fmtHourMin(s.end)}`;
+    if (s.type === "free") {
+      const dur = Math.round((s.end - s.start) * 60);
+      const durStr = dur >= 60 ? `${Math.floor(dur/60)}h ${dur%60 ? dur%60 + "m" : ""}`.trim() : dur + "m";
+      return `<div class="schedule-slot free">
+        <span class="slot-time">${timeStr}</span>
+        <span class="slot-label">Free · ${durStr}</span>
+      </div>`;
+    } else {
+      return `<div class="schedule-slot booked">
+        <span class="slot-time">${timeStr}</span>
+        <span class="slot-label">${s.label}</span>
+      </div>`;
+    }
+  }).join("");
+
+  const bookedBlocks = sorted.map(b => {
+    const l = Math.max(0, (b.startHour - DAY_START) / SPAN * 100);
+    const r = Math.max(0, (DAY_END - b.endHour) / SPAN * 100);
+    return `<div class="booked-block" style="left:${l.toFixed(2)}%;right:${r.toFixed(2)}%"></div>`;
+  }).join("");
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">${info.name}</div>
+          <div class="modal-subtitle">${info.building}${info.address ? " · " + info.address : ""}</div>
+        </div>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div class="modal-date">${dateLabel}</div>
+      <div class="modal-timeline">${bookedBlocks}</div>
+      <div class="schedule-list">${slotRows}</div>
+    </div>`;
+
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
 loadData().catch(() => {
   document.getElementById("weekView").innerHTML =
     '<div class="loading">Failed to load — try refreshing.</div>';
