@@ -181,7 +181,10 @@ def index():
 
 @app.route("/api/bookings")
 def bookings():
-    week_offset = int(request.args.get("week", 0))
+    try:
+        week_offset = int(request.args.get("week", 0))
+    except (ValueError, TypeError):
+        week_offset = 0
     week_offset = max(-1, min(4, week_offset))
 
     if os.environ.get("PITCHER_LIVE", "").lower() == "true":
