@@ -56,7 +56,7 @@ Each uncached request fetches fresh data from eTimmi.
 
 | File | Description |
 |------|-------------|
-| `app.py` | Flask app — static and live modes |
+| `app.py` | Flask app with static and live modes |
 | `pitch_scraper.py` | Scrapes eTimmi, saves `static/bookings.json` |
 | `templates/index.html` | Frontend HTML |
 | `static/app.js` | Frontend logic |
