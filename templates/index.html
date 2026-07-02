@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pitcher — Jyväskylä</title>
-<meta name="theme-color" content="#1a3d2b">
+<meta name="theme-color" content="#0a0e0c">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pitcher">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/style.css">
@@ -16,15 +19,30 @@
 <body>
 <header>
   <div class="brand">
-    <h1>Pitcher<span class="dot">.</span></h1>
-    <div class="subtitle">Jyväskylä football pitches</div>
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 192 192" fill="none">
+        <rect x="28" y="44" width="136" height="104" rx="6" stroke="#34d27a" stroke-width="9"/>
+        <line x1="96" y1="44" x2="96" y2="148" stroke="#34d27a" stroke-width="8"/>
+        <circle cx="96" cy="96" r="24" stroke="#34d27a" stroke-width="8"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Pitcher<span class="dot">.</span></h1>
+      <div class="subtitle">Jyväskylä football pitches</div>
+    </div>
   </div>
   <div class="updated" id="updatedAt"></div>
 </header>
-<div class="main-tabs">
-  <button class="main-tab active" onclick="switchTab('week', this)">Weekly</button>
-  <button class="main-tab" onclick="switchTab('find', this)">Find a slot</button>
-</div>
+<nav class="main-tabs">
+  <button class="main-tab active" onclick="switchTab('week', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Weekly
+  </button>
+  <button class="main-tab" onclick="switchTab('find', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
+    Find a slot
+  </button>
+</nav>
 <div id="weekNav" class="week-nav" style="display:none;"></div>
 <div id="weekView">
   <div class="loading"><div class="spinner"></div> Loading bookings…</div>
@@ -32,7 +50,10 @@
 <div id="findView" style="display:none;">
   <div class="find-panel">
     <div class="find-hero">
-      <button class="btn-now" onclick="searchNow()">Free right now</button>
+      <button class="btn-now" onclick="searchNow()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Free right now
+      </button>
     </div>
     <div class="divider">or pick a time</div>
     <div class="find-form">
@@ -49,26 +70,34 @@
         </div>
       </div>
       <div>
-        <div class="field-label">Sort by</div>
+        <div class="field-label">Distance</div>
         <div class="loc-row">
           <button class="btn-loc" id="locBtn" onclick="toggleLocation()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             Use my location
           </button>
           <span class="loc-status" id="locStatus"></span>
         </div>
       </div>
-      <button class="btn-search" onclick="runSearch()">Show free pitches →</button>
+      <button class="btn-search" onclick="runSearch()">
+        Show free pitches
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></svg>
+      </button>
     </div>
     <div class="results" id="results" style="display:none;">
       <div class="search-bar">
-        <input class="search-input" type="text" id="findSearchInput"
-          placeholder="Hipposhalli…"
-          oninput="findSearch = this.value.toLowerCase(); runSearch()">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
+          <input class="search-input" type="text" id="findSearchInput"
+            placeholder="Filter by pitch or area…"
+            oninput="findSearch = this.value.toLowerCase(); runSearch()">
+        </div>
       </div>
       <div id="resultsBody"></div>
     </div>
   </div>
 </div>
+<footer>Data from Jyväskylä eTimmi booking system</footer>
 <script src="/static/app.js"></script>
 </body>
 </html>

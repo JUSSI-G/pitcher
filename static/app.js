@@ -102,10 +102,11 @@ async function loadData() {
   const data = await res.json();
   if (data.error) { const e = new Error(data.error); e.noData = true; throw e; }
   allData = data;
-  document.getElementById("updatedAt").textContent =
-    "Updated " + new Date(allData.fetchedAt).toLocaleTimeString("fi-FI", {
-      timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit"
-    });
+  const updatedTime = new Date(allData.fetchedAt).toLocaleTimeString("fi-FI", {
+    timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit"
+  });
+  document.getElementById("updatedAt").innerHTML =
+    `<span class="pulse"></span>Updated ${updatedTime}`;
   const byDate = {};
   for (const b of allData.bookings) {
     const dk = localDateKey(b.startMs);
@@ -200,9 +201,12 @@ function buildWeekView(dates) {
     <div class="day-tabs" id="dayTabs"></div>
     <div class="summary" id="summary"></div>
     <div class="search-bar">
-      <input class="search-input" type="text" id="weekSearchInput"
-        placeholder="Vaajakoski, Hipposhalli…"
-        oninput="weekSearch = this.value.toLowerCase(); renderBoard()">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
+        <input class="search-input" type="text" id="weekSearchInput"
+          placeholder="Vaajakoski, Hipposhalli…"
+          oninput="weekSearch = this.value.toLowerCase(); renderBoard()">
+      </div>
     </div>
     <div class="legend">
       <span><i class="swatch" style="background:var(--free)"></i>Free</span>
@@ -219,12 +223,18 @@ function buildWeekView(dates) {
   renderDayTabs(dates);
   renderWeek();
 }
+function dayChipLabel(d) {
+  const dt = new Date(d + "T12:00:00Z");
+  const isToday = d === localDateKey(Date.now());
+  const wd = isToday ? "Today" : dt.toLocaleDateString("en-GB", { weekday: "short" });
+  const dn = dt.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
+  return { isToday, html: `<span class="dt-wd">${wd}</span><span class="dt-dn">${dn}</span>` };
+}
 function renderDayTabs(dates) {
   document.getElementById("dayTabs").innerHTML = dates.map(d => {
-    const label = new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {
-      weekday: "short", day: "2-digit", month: "2-digit"
-    });
-    return `<button class="day-tab${d === activeDay ? " active" : ""}" onclick="setDay('${d}',this)">${label}</button>`;
+    const { isToday, html } = dayChipLabel(d);
+    const cls = "day-tab" + (d === activeDay ? " active" : "") + (isToday ? " is-today" : "");
+    return `<button class="${cls}" onclick="setDay('${d}',this)">${html}</button>`;
   }).join("");
 }
 function setDay(d, el) {
@@ -243,16 +253,20 @@ function renderSummary() {
   const ids = Object.keys(dayData);
   const isToday = activeDay === localDateKey(Date.now());
   const nowH = localHour(Date.now());
-  let html = "";
+  let totalFreeMin = 0;
+  for (const id of ids) totalFreeMin += freeMinutes(effectiveBookings(id, dayData));
+  const stats = [];
   if (isToday) {
     const freeNow = ids.filter(id => {
       const bookings = effectiveBookings(id, dayData);
       return nowH >= DAY_START && nowH < DAY_END &&
         !bookings.some(b => b.startHour <= nowH && b.endHour > nowH);
     }).length;
-    html = `<div class="stat"><div class="n">${freeNow}/${ids.length}</div><div class="l">free right now</div></div>`;
+    stats.push(`<div class="stat accent"><div class="n">${freeNow}/${ids.length}</div><div class="l">free right now</div></div>`);
   }
-  document.getElementById("summary").innerHTML = html;
+  stats.push(`<div class="stat"><div class="n">${ids.length}</div><div class="l">pitches</div></div>`);
+  stats.push(`<div class="stat"><div class="n">${Math.round(totalFreeMin / 60)}h</div><div class="l">free time ${isToday ? "today" : "this day"}</div></div>`);
+  document.getElementById("summary").innerHTML = stats.join("");
 }
 function renderAxis() {
   const el = document.getElementById("axis");
@@ -286,8 +300,9 @@ function renderBoard() {
       const fStr = free === 0 ? "fully booked" : fH > 0 ? `${fH}h ${fM}m free` : `${fM}m free`;
       const slots = freeSlots(bookings);
       const row = document.createElement("div"); row.className = "pitch-row";
+      row.onclick = () => showPitchSchedule(pid, activeDay);
       const nc  = document.createElement("div"); nc.className = "pitch-name";
-      nc.innerHTML = `<span>${info.name}</span>`;
+      nc.innerHTML = `<span>${info.name}</span><span class="free-label${free === 0 ? " none" : ""}">${fStr}</span>`;
       const tl = document.createElement("div");
       tl.className = "timeline" + (free === 0 ? " no-free" : "");
       if (isToday && nowH >= DAY_START && nowH <= DAY_END) {
@@ -317,10 +332,9 @@ function renderBoard() {
 function buildFindForm(dates) {
   const pd = document.getElementById("pickDays");
   pd.innerHTML = dates.map(d => {
-    const label = new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {
-      weekday: "short", day: "2-digit", month: "2-digit"
-    });
-    return `<button class="pick-day${d === searchDay ? " active" : ""}" data-date="${d}" onclick="setSearchDay('${d}',this)">${label}</button>`;
+    const { isToday, html } = dayChipLabel(d);
+    const cls = "pick-day" + (d === searchDay ? " active" : "") + (isToday ? " is-today" : "");
+    return `<button class="${cls}" data-date="${d}" onclick="setSearchDay('${d}',this)">${html}</button>`;
   }).join("");
   updateSlider(document.getElementById("timeSlider"));
 }function setSearchDay(d, el) {
@@ -407,7 +421,7 @@ function showResults(dateKey, targetHour) {
   const freeCount = entries.filter(e => e.freeNow).length;
   const visibleEntries = entries.filter(e => e.freeNow || e.surrounding.length > 0);
   bodyEl.innerHTML = `
-    <div class="results-title">${freeCount} pitches free on ${label} at ${timeStr}</div>
+    <div class="results-title"><strong>${freeCount}</strong> pitches free on ${label} at ${timeStr}</div>
     ${visibleEntries.map(entry => {
       const dist = entry.dist !== null ? `<div class="result-dist"><span class="km">${entry.dist.toFixed(1)}</span>km</div>` : "";
       const pills = entry.surrounding.map(s => {
@@ -419,10 +433,14 @@ function showResults(dateKey, targetHour) {
           onclick="showPitchSchedule('${entry.pid}', '${dateKey}')">
           ${dist}
           <div class="result-body">
-            <div class="result-name">${entry.info.name}</div>
+            <div class="result-head">
+              <span class="result-name">${entry.info.name}</span>
+              ${entry.freeNow ? '<span class="badge-free">Free</span>' : ""}
+            </div>
             <div class="result-building">${entry.info.building}${entry.info.address ? " · " + entry.info.address : ""}</div>
             <div class="result-slots">${pills || '<span class="no-results">No free slots around this time</span>'}</div>
           </div>
+          <div class="result-chev">›</div>
         </div>`;
     }).join("") || '<div class="no-results">No pitches free around that time.</div>'}
   `;
@@ -430,7 +448,7 @@ function showResults(dateKey, targetHour) {
 
 function showPitchSchedule(pid, dateKey) {
   const info = allData.pitches[pid];
-  const dayData = findData[dateKey] || {};
+  const dayData = findData[dateKey] || (allData._byDate || {})[dateKey] || {};
   const bookings = effectiveBookings(pid, dayData);
   const slots = freeSlots(bookings);
   const dateLabel = new Date(dateKey + "T12:00:00Z").toLocaleDateString("en-GB", {
@@ -470,6 +488,16 @@ function showPitchSchedule(pid, dateKey) {
     return `<div class="booked-block" style="left:${l.toFixed(2)}%;right:${r.toFixed(2)}%"></div>`;
   }).join("");
 
+  const isToday = dateKey === localDateKey(Date.now());
+  const nowH = localHour(Date.now());
+  const nowLine = isToday && nowH >= DAY_START && nowH <= DAY_END
+    ? `<div class="now-line" style="left:${((nowH - DAY_START) / SPAN * 100).toFixed(2)}%"></div>` : "";
+
+  const totalFree = freeMinutes(bookings);
+  const freeStr = totalFree === 0 ? "Fully booked"
+    : totalFree >= 60 ? `${Math.floor(totalFree / 60)}h ${totalFree % 60 ? totalFree % 60 + "m" : ""} free`.replace("  ", " ").trim()
+    : `${totalFree}m free`;
+
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -481,8 +509,8 @@ function showPitchSchedule(pid, dateKey) {
         </div>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
       </div>
-      <div class="modal-date">${dateLabel}</div>
-      <div class="modal-timeline">${bookedBlocks}</div>
+      <div class="modal-date">${dateLabel}<span class="free-total">${freeStr}</span></div>
+      <div class="modal-timeline">${bookedBlocks}${nowLine}</div>
       <div class="schedule-list">${slotRows}</div>
     </div>`;
 
