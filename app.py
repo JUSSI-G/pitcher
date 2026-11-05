@@ -52,7 +52,7 @@ def static_data(week_offset: int, path: Path | None = None) -> dict | None:
         return None
     start_ms, end_ms = etimmi.week_range_ms(week_offset)
     bookings = [b for b in data["bookings"] if start_ms <= b["startMs"] < end_ms]
-    return {**data, "bookings": bookings}
+    return {**data, "pitches": etimmi.with_coords(data["pitches"]), "bookings": bookings}
 
 
 @app.route("/")

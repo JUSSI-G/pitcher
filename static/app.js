@@ -57,6 +57,27 @@ function mergeBookings(a, b) {
   return [...a, ...extra];
 }
 
+// eTimmi returns nothing at all for pitches that have no published schedule
+// (typically outdoor pitches out of season). Such a pitch is unknown, not free.
+function hasSchedule(pid, dayData) {
+  if (dayData[pid]) return true;
+  const g = PID_GROUP[pid];
+  return !!g && [g.full, ...g.halves].some(id => dayData[id]);
+}
+
+function scheduledPitches(dayData) {
+  return Object.keys(allData.pitches).filter(pid => hasSchedule(pid, dayData));
+}
+
+function venueCount(pids) {
+  return new Set(pids.map(pid => allData.pitches[pid].building)).size;
+}
+
+function fmtDuration(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h && m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
+}
+
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, c => ESC[c]); }
@@ -109,11 +130,13 @@ async function loadData() {
   const data = await res.json();
   if (data.error) { const e = new Error(data.error); e.noData = true; throw e; }
   allData = data;
-  const updatedTime = new Date(allData.fetchedAt).toLocaleTimeString("fi-FI", {
-    timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit"
-  });
+  const fetched = allData.fetchedAt;
+  const sameDay = localDateKey(fetched) === localDateKey(Date.now());
+  const when = sameDay ? fmtTime(fetched) : new Intl.DateTimeFormat("fi-FI", {
+    timeZone: "Europe/Helsinki", day: "numeric", month: "numeric"
+  }).format(new Date(fetched)) + " " + fmtTime(fetched);
   document.getElementById("updatedAt").innerHTML =
-    `<span class="pulse"></span>Updated ${updatedTime}`;
+    `Updated ${when}`;
   const byDate = {};
   for (const b of allData.bookings) {
     const dk = localDateKey(b.startMs);
@@ -126,7 +149,8 @@ async function loadData() {
   }
   allData._byDate = byDate;
   const dates = Object.keys(byDate).sort();
-  activeDay = dates[0];
+  const todayKey = localDateKey(Date.now());
+  activeDay = dates.includes(todayKey) ? todayKey : dates[0];
   buildWeekView(dates);
 }
 
@@ -173,7 +197,7 @@ function weekLabel() {
 function changeWeek(delta) {
   weekOffset += delta;
   document.getElementById("weekView").innerHTML =
-    '<div class="loading"><div class="spinner"></div> Loading…</div>';
+    '<div class="skeleton" aria-busy="true">' + '<div class="sk-row"></div>'.repeat(5) + '</div>';
   renderWeekNav();
   loadData().catch(() => {
     document.getElementById("weekView").innerHTML =
@@ -213,14 +237,14 @@ function buildWeekView(dates) {
       <div class="search-wrap">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
         <input class="search-input" type="text" id="weekSearchInput"
-          placeholder="Vaajakoski, Hipposhalli…"
-          oninput="weekSearch = this.value.toLowerCase(); renderBoard()">
+          placeholder="Search a venue — Hipposhalli, Vehka…" aria-label="Search venues"
+          oninput="weekSearch = this.value.toLowerCase(); renderBoard(false)">
       </div>
     </div>
     <div class="legend">
-      <span><i class="swatch" style="background:var(--free)"></i>Free</span>
-      <span><i class="swatch" style="background:var(--booked)"></i>Booked</span>
-      <span><i class="swatch" style="background:var(--gold)"></i>Now</span>
+      <span><i class="sw sw-free"></i>Free</span>
+      <span><i class="sw sw-booked"></i>Booked</span>
+      <span><i class="sw sw-now"></i>Now</span>
     </div>
     <div class="board">
       <div class="axis" id="axis"></div>
@@ -243,10 +267,10 @@ function dayChipLabel(d) {
   return { isToday, html: `<span class="dt-wd">${wd}</span><span class="dt-dn">${dn}</span>` };
 }
 function renderDayTabs(dates) {
-  document.getElementById("dayTabs").innerHTML = dates.map(d => {
+  document.getElementById("dayTabs").innerHTML = dates.map((d, i) => {
     const { isToday, html } = dayChipLabel(d);
-    const cls = "day-tab" + (d === activeDay ? " active" : "") + (isToday ? " is-today" : "");
-    return `<button class="${cls}" onclick="setDay('${d}',this)">${html}</button>`;
+    const cls = "day-tab rise" + (d === activeDay ? " active" : "") + (isToday ? " is-today" : "");
+    return `<button class="${cls}" style="--i:${i}" onclick="setDay('${d}',this)">${html}</button>`;
   }).join("");
 }
 function setDay(d, el) {
@@ -262,7 +286,7 @@ function renderWeek() {
 }
 function renderSummary() {
   const dayData = allData._byDate[activeDay] || {};
-  const ids = Object.keys(dayData);
+  const ids = scheduledPitches(dayData);
   const isToday = activeDay === localDateKey(Date.now());
   const nowH = localHour(Date.now());
   let totalFreeMin = 0;
@@ -274,11 +298,12 @@ function renderSummary() {
       return nowH >= DAY_START && nowH < DAY_END &&
         !bookings.some(b => b.startHour <= nowH && b.endHour > nowH);
     }).length;
-    stats.push(`<div class="stat accent"><div class="n">${freeNow}/${ids.length}</div><div class="l">free right now</div></div>`);
+    stats.push(`<div class="stat accent"><div class="n">${freeNow}<small>/${ids.length}</small></div><div class="l">free right now</div></div>`);
   }
-  stats.push(`<div class="stat"><div class="n">${ids.length}</div><div class="l">pitches</div></div>`);
-  stats.push(`<div class="stat"><div class="n">${Math.round(totalFreeMin / 60)}h</div><div class="l">free time ${isToday ? "today" : "this day"}</div></div>`);
-  document.getElementById("summary").innerHTML = stats.join("");
+  stats.push(`<div class="stat"><div class="n">${ids.length}</div><div class="l">pitches · ${venueCount(ids)} venues</div></div>`);
+  stats.push(`<div class="stat"><div class="n">${Math.round(totalFreeMin / 60)}<small>h</small></div><div class="l">open time ${isToday ? "today" : "this day"}</div></div>`);
+  document.getElementById("summary").innerHTML = stats
+    .map((s, i) => s.replace('class="stat', `style="--i:${i}" class="rise stat`)).join("");
 }
 function renderAxis() {
   const el = document.getElementById("axis");
@@ -289,29 +314,33 @@ function renderAxis() {
     t.textContent = h + ":00"; el.appendChild(t);
   }
 }
-function renderBoard() {
+function renderBoard(animate = true) {
   const board = document.getElementById("board");
   board.innerHTML = "";
+  board.classList.remove("animate");
+  if (animate) { void board.offsetWidth; board.classList.add("animate"); }
   const dayData = allData._byDate[activeDay] || {};
   const isToday = activeDay === localDateKey(Date.now());
   const nowH = localHour(Date.now());
   const byBuilding = {};
   for (const [pid, info] of Object.entries(allData.pitches)) {
-    if (!dayData[pid]) continue;
+    if (!hasSchedule(pid, dayData)) continue;
     if (weekSearch && !(info.name + " " + info.building).toLowerCase().includes(weekSearch)) continue;
     const bookings = effectiveBookings(pid, dayData);
     if (!byBuilding[info.building]) byBuilding[info.building] = [];
     byBuilding[info.building].push({ pid, info, bookings, free: freeMinutes(bookings) });
   }
+  let i = 0;
+  const stagger = el => el.style.setProperty("--i", Math.min(i++, 16));
   for (const [building, pitches] of Object.entries(byBuilding)) {
     pitches.sort((a, b) => b.free - a.free);
-    const aEl = document.createElement("div"); aEl.className = "area-label";
-    aEl.textContent = building; board.appendChild(aEl);
+    const aEl = document.createElement("div"); aEl.className = "area-label"; stagger(aEl);
+    aEl.innerHTML = `${esc(building)}<span class="count">${pitches.length} pitch${pitches.length > 1 ? "es" : ""}</span>`;
+    board.appendChild(aEl);
     for (const { pid, info, bookings, free } of pitches) {
-      const fH = Math.floor(free/60), fM = free%60;
-      const fStr = free === 0 ? "fully booked" : fH > 0 ? `${fH}h ${fM}m free` : `${fM}m free`;
+      const fStr = free === 0 ? "fully booked" : `${fmtDuration(free)} free`;
       const slots = freeSlots(bookings);
-      const row = document.createElement("div"); row.className = "pitch-row";
+      const row = document.createElement("div"); row.className = "pitch-row"; stagger(row);
       row.onclick = () => showPitchSchedule(pid, activeDay);
       const nc  = document.createElement("div"); nc.className = "pitch-name";
       nc.innerHTML = `<span>${esc(info.name)}</span><span class="free-label${free === 0 ? " none" : ""}">${fStr}</span>`;
@@ -338,6 +367,17 @@ function renderBoard() {
       }
       row.appendChild(nc); row.appendChild(tl); board.appendChild(row);
     }
+  }
+
+  const allVenues = new Set(Object.values(allData.pitches).map(p => p.building)).size;
+  const shownVenues = Object.keys(byBuilding).length;
+  if (!shownVenues) {
+    board.insertAdjacentHTML("beforeend", weekSearch
+      ? `<div class="empty-note">No venue matching <b>“${esc(weekSearch)}”</b> has a schedule this day.</div>`
+      : `<div class="empty-note">No pitch has a published schedule for this day.</div>`);
+  } else if (!weekSearch && shownVenues < allVenues) {
+    board.insertAdjacentHTML("beforeend",
+      `<div class="board-note">${allVenues - shownVenues} other venues have no schedule for this day (usually outdoor pitches out of season).</div>`);
   }
 }
 
@@ -407,7 +447,9 @@ function showResults(dateKey, targetHour) {
   const bodyEl = document.getElementById("resultsBody");
   resultsEl.style.display = "";
   const entries = [];
-  for (const [pid, info] of Object.entries(allData.pitches)) {
+  const scheduled = scheduledPitches(dayData);
+  for (const pid of scheduled) {
+    const info = allData.pitches[pid];
     if (findSearch && !(info.name + " " + info.building).toLowerCase().includes(findSearch)) continue;
     const bookings = effectiveBookings(pid, dayData);
     const slots = freeSlots(bookings);
@@ -427,21 +469,24 @@ function showResults(dateKey, targetHour) {
   const label = new Date(dateKey + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long" });
   const timeStr = fmtHourMin(targetHour);
   if (entries.length === 0) {
-    bodyEl.innerHTML = `<div class="results-title">Results</div><div class="no-results">No data for this day.</div>`;
+    bodyEl.innerHTML = `<div class="results-title">No schedules</div>
+      <div class="no-results">${findSearch ? "Nothing matches that filter on this day." : "No pitch has a published schedule for this day."}</div>`;
     return;
   }
   const freeCount = entries.filter(e => e.freeNow).length;
   const visibleEntries = entries.filter(e => e.freeNow || e.surrounding.length > 0);
+  const unlisted = Object.keys(allData.pitches).length - scheduled.length;
   bodyEl.innerHTML = `
-    <div class="results-title"><strong>${freeCount}</strong> pitches free on ${label} at ${timeStr}</div>
-    ${visibleEntries.map(entry => {
+    <div class="results-title"><strong>${freeCount}</strong> of ${entries.length} pitches free on ${label} at ${timeStr}
+      ${unlisted ? `<small>${unlisted} pitches without a published schedule are not shown</small>` : ""}</div>
+    ${visibleEntries.map((entry, i) => {
       const dist = entry.dist !== null ? `<div class="result-dist"><span class="km">${entry.dist.toFixed(1)}</span>km</div>` : "";
       const pills = entry.surrounding.map(s => {
         const covers = s.start <= targetHour && s.end > targetHour;
         return `<span class="slot-pill${covers ? " highlight" : ""}">${fmtHourMin(s.start)}–${fmtHourMin(s.end)}</span>`;
       }).join("");
       return `
-        <div class="result-card${entry.freeNow ? " is-free" : ""}" style="cursor:pointer"
+        <div class="result-card${entry.freeNow ? " is-free" : ""}" style="--i:${Math.min(i, 12)}"
           onclick="showPitchSchedule('${entry.pid}', '${dateKey}')">
           ${dist}
           <div class="result-body">
@@ -466,14 +511,24 @@ function venueAvailability(dateKey) {
   const venues = {};
   for (const [pid, info] of Object.entries(allData.pitches)) {
     if (info.lat == null || info.lng == null) continue;
-    if (!dayData[pid]) continue;
+    const v = venues[info.building] || (venues[info.building] =
+      { building: info.building, address: info.address, lat: info.lat, lng: info.lng, pitches: [] });
+    if (!hasSchedule(pid, dayData)) {
+      v.pitches.push({ pid, info, scheduled: false, free: 0, freeNow: false });
+      continue;
+    }
     const bookings = effectiveBookings(pid, dayData);
     const free = freeMinutes(bookings);
     const freeNow = isToday && nowH >= DAY_START && nowH < DAY_END &&
       !bookings.some(b => b.startHour <= nowH && b.endHour > nowH);
-    const v = venues[info.building] || (venues[info.building] =
-      { building: info.building, address: info.address, lat: info.lat, lng: info.lng, pitches: [] });
-    v.pitches.push({ pid, info, free, freeNow });
+    v.pitches.push({ pid, info, scheduled: true, free, freeNow });
+  }
+  for (const v of Object.values(venues)) {
+    const listed = v.pitches.filter(p => p.scheduled);
+    v.scheduled = listed.length > 0;
+    v.freeNowCount = listed.filter(p => p.freeNow).length;
+    v.freeCount = listed.filter(p => p.free > 0).length;
+    v.state = !v.scheduled ? "none" : v.freeNowCount ? "now" : v.freeCount ? "later" : "full";
   }
   return Object.values(venues);
 }
@@ -510,56 +565,63 @@ function setMapDay(d, elBtn) {
 function initMap() {
   if (map || typeof L === "undefined") return;
   map = L.map("map", { scrollWheelZoom: false, zoomControl: true, attributionControl: true })
-    .setView([62.244, 25.75], 11);
-  L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 16
-    }
-  ).addTo(map);
+    .setView([62.245, 25.74], 12);
+  const esri = layer =>
+    `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
+  L.tileLayer(esri("World_Light_Gray_Base"), {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 16
+  }).addTo(map);
+  L.tileLayer(esri("World_Light_Gray_Reference"), { maxZoom: 16, pane: "overlayPane" }).addTo(map);
+  const syncZoomClass = () => map.getContainer().classList.toggle("zoomed-out", map.getZoom() < 11);
+  map.on("zoomend", syncZoomClass);
+  syncZoomClass();
 }
+
+const MARKER_LABEL = { now: "free now", later: "free later today", full: "fully booked", none: "no schedule" };
 
 function renderMap() {
   if (!map) return;
   mapMarkers.forEach(m => map.removeLayer(m));
   mapMarkers = [];
   const venues = venueAvailability(mapDay);
-  const bounds = [];
-  for (const v of venues) {
-    const freeNow = v.pitches.filter(p => p.freeNow).length;
-    const freeLater = v.pitches.some(p => p.free > 0);
-    const color = freeNow > 0 ? "#34d27a" : freeLater ? "#ffcf4a" : "#6b7a71";
-    const count = freeNow > 0 ? freeNow : v.pitches.filter(p => p.free > 0).length;
+  // scheduled venues first so they render on top of greyed-out ones
+  venues.sort((a, b) => a.scheduled - b.scheduled);
+  venues.forEach((v, i) => {
+    const count = v.state === "now" ? v.freeNowCount : v.state === "later" ? v.freeCount : v.state === "full" ? 0 : "–";
     const icon = L.divIcon({
       className: "pitch-marker-wrap",
-      html: `<div class="pitch-marker" style="--mk:${color}">
-               <span class="mk-dot"></span><span class="mk-n">${count || "–"}</span>
-             </div>`,
-      iconSize: [44, 28], iconAnchor: [22, 28]
+      html: `<div class="mk-pos"><div class="pitch-marker mk-${v.state}" style="--i:${i}">
+               <span class="mk-dot"></span><span class="mk-n">${count}</span></div></div>`,
+      iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, -14]
     });
-    const marker = L.marker([v.lat, v.lng], { icon }).addTo(map);
+    const marker = L.marker([v.lat, v.lng], {
+      icon, riseOnHover: true, zIndexOffset: v.scheduled ? 500 : 0,
+      title: `${v.building}: ${MARKER_LABEL[v.state]}`, alt: v.building
+    }).addTo(map);
     const rows = v.pitches
-      .sort((a, b) => b.free - a.free)
-      .map(p => {
-        const h = Math.floor(p.free / 60), m = p.free % 60;
-        const fStr = p.free === 0 ? "full" : h > 0 ? `${h}h ${m}m` : `${m}m`;
-        return `<button class="pop-row${p.freeNow ? " is-free" : ""}"
-                  onclick="showPitchSchedule('${p.pid}','${mapDay}')">
-                  <span class="pop-name">${esc(p.info.name)}</span>
-                  <span class="pop-free${p.free === 0 ? " none" : ""}">${p.freeNow ? "now · " : ""}${fStr}</span>
-                </button>`;
-      }).join("");
+      .sort((a, b) => (b.scheduled - a.scheduled) || (b.free - a.free))
+      .map(p => p.scheduled
+        ? `<button class="pop-row${p.freeNow ? " is-free" : ""}" onclick="showPitchSchedule('${p.pid}','${mapDay}')">
+             <span class="pop-name">${esc(p.info.name)}</span>
+             <span class="pop-free${p.free === 0 ? " none" : ""}">${p.freeNow ? "now · " : ""}${p.free ? fmtDuration(p.free) : "full"}</span>
+           </button>`
+        : `<div class="pop-row unlisted">
+             <span class="pop-name">${esc(p.info.name)}</span><span class="pop-free none">no schedule</span>
+           </div>`)
+      .join("");
     marker.bindPopup(
       `<div class="pop-head">${esc(v.building)}</div>
        ${v.address ? `<div class="pop-addr">${esc(v.address)}</div>` : ""}
        <div class="pop-list">${rows}</div>`,
-      { className: "pitch-popup", maxWidth: 260 }
+      { className: "pitch-popup", maxWidth: 280 }
     );
     mapMarkers.push(marker);
-    bounds.push([v.lat, v.lng]);
-  }
-  if (bounds.length) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13 });
+  });
+  // frame the venues that actually have schedules; fall back to everything
+  const listed = venues.filter(v => v.scheduled);
+  const frame = (listed.length >= 2 ? listed : venues).map(v => [v.lat, v.lng]);
+  if (frame.length) map.fitBounds(frame, { padding: [56, 56], maxZoom: 13 });
 }
 
 function showPitchSchedule(pid, dateKey) {
@@ -610,9 +672,7 @@ function showPitchSchedule(pid, dateKey) {
     ? `<div class="now-line" style="left:${((nowH - DAY_START) / SPAN * 100).toFixed(2)}%"></div>` : "";
 
   const totalFree = freeMinutes(bookings);
-  const freeStr = totalFree === 0 ? "Fully booked"
-    : totalFree >= 60 ? `${Math.floor(totalFree / 60)}h ${totalFree % 60 ? totalFree % 60 + "m" : ""} free`.replace("  ", " ").trim()
-    : `${totalFree}m free`;
+  const freeStr = totalFree === 0 ? "Fully booked" : `${fmtDuration(totalFree)} free`;
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -623,7 +683,7 @@ function showPitchSchedule(pid, dateKey) {
           <div class="modal-title">${esc(info.name)}</div>
           <div class="modal-subtitle">${esc(info.building)}${info.address ? " · " + esc(info.address) : ""}</div>
         </div>
-        <button class="modal-close" onclick="closeModal(this.closest('.modal-overlay'))" aria-label="Close">✕</button>
+        <button class="modal-close" onclick="closeModal(this.closest('.modal-overlay'))" aria-label="Close">&times;</button>
       </div>
       <div class="modal-date">${dateLabel}<span class="free-total">${freeStr}</span></div>
       <div class="modal-timeline">${bookedBlocks}${nowLine}</div>
@@ -648,5 +708,5 @@ loadData().catch(err => {
 });
 loadFindData().catch(err => {
   document.getElementById("pickDays").innerHTML =
-    `<span style="color:var(--muted-2);font-size:12px;">${err.noData ? "Data not loaded." : "Could not load dates — try refreshing."}</span>`;
+    `<span class="loc-status">${err.noData ? "Data not loaded." : "Could not load dates — try refreshing."}</span>`;
 });

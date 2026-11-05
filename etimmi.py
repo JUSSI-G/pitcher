@@ -29,27 +29,40 @@ PITCH_IDS = [
     7762, 7763, 7761, 7764, 7765, 7766, 7768, 7769, 7777, 7770,
 ]
 
+# Venue coordinates, geocoded against OpenStreetMap (Nominatim).
+# Venues marked ~ resolve to the neighbouring school or area, not the pitch itself.
 BUILDING_COORDS = {
-    "Halssilan liikuntapuisto":    (62.237, 25.719),
-    "Harjun stadion":              (62.242, 25.742),
-    "Hipposhalli":                 (62.231, 25.726),
-    "Huhtahalli":                  (62.266, 25.706),
-    "Jyskän tekonurmi":            (62.222, 25.839),
-    "Keljonkankaan koulun kenttä": (62.209, 25.716),
-    "Korpilahden ulkoalueet":      (62.012, 25.551),
-    "Mankolan tekonurmikenttä":    (62.261, 25.732),
-    "Palokan liikuntapuisto":      (62.296, 25.680),
-    "Savulahti tekonurmi":         (62.255, 25.680),
-    "Säynätsalon urheilukenttä":   (62.143, 25.845),
-    "Tikkakosken tekonurmi":       (62.394, 25.686),
-    "Tikkakosken urheilukenttä":   (62.394, 25.686),
-    "Vaajakosken liikuntapuisto":  (62.235, 25.897),
-    "Vaajakummun pallokenttä":     (62.237, 25.878),
-    "Vehkahalli":                  (62.253, 25.759),
-    "Vehkalampi":                  (62.251, 25.756),
-    "Viitaniemen liikuntapuisto":  (62.249, 25.751),
-    "Lehtisaaren kenttä":          (62.147, 25.851),
+    "Halssilan liikuntapuisto":    (62.2469, 25.8032),
+    "Harjun stadion":              (62.2448, 25.7404),
+    "Hipposhalli":                 (62.2362, 25.7201),
+    "Huhtahalli":                  (62.2653, 25.8017),
+    "Jyskän tekonurmi":            (62.2416, 25.8459),  # ~ Jyskän koulu
+    "Keljonkankaan koulun kenttä": (62.1908, 25.7075),
+    "Keski-Palokan kenttä":        (62.2926, 25.7139),  # ~ Keski-Palokan koulu
+    "Korpilahden ulkoalueet":      (62.0182, 25.5600),
+    "Lehtisaaren kenttä":          (62.1291, 25.7603),  # ~ Lehtisaari, Säynätsalo
+    "Liinalammin pallokenttä":     (62.3840, 25.6751),  # ~ Liinalampi
+    "Mankolan tekonurmikenttä":    (62.2681, 25.7247),
+    "Palokan liikuntapuisto":      (62.2887, 25.7332),
+    "Savulahti tekonurmi":         (62.2786, 25.6963),  # ~ Savulahden koulu
+    "Säynätsalon urheilukenttä":   (62.1417, 25.7662),
+    "Tikkakosken tekonurmi":       (62.3933, 25.6390),
+    "Tikkakosken urheilukenttä":   (62.3938, 25.6438),
+    "Vaajakosken liikuntapuisto":  (62.2497, 25.8699),
+    "Vaajakummun pallokenttä":     (62.2435, 25.8647),  # ~ Vaajakummun koulu
+    "Vehkahalli":                  (62.2489, 25.7193),  # ~ Wilhelm Schildtin katu
+    "Vehkalampi":                  (62.2451, 25.7150),
+    "Viitaniemen liikuntapuisto":  (62.2486, 25.7333),
 }
+
+
+def with_coords(pitches: dict[str, dict]) -> dict[str, dict]:
+    """Attach the current venue coordinates (snapshots may carry stale ones)."""
+    out = {}
+    for pid, p in pitches.items():
+        lat, lng = BUILDING_COORDS.get(p.get("building", ""), (None, None))
+        out[pid] = {**p, "lat": lat, "lng": lng}
+    return out
 
 # Calendar view window requested from eTimmi, in ms since midnight (04:00–21:00).
 VIEW_START_MS = 4 * 3600 * 1000

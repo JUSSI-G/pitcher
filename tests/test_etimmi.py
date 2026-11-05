@@ -111,5 +111,6 @@ def test_fetch_pitches_attaches_coordinates_and_skips_nameless():
     client = etimmi.EtimmiClient(session=FakeSession(rooms))
     pitches = client.fetch_pitches()
     assert set(pitches) == {"7982", "1"}
-    assert (pitches["7982"]["lat"], pitches["7982"]["lng"]) == (62.242, 25.742)
+    coords = (pitches["7982"]["lat"], pitches["7982"]["lng"])
+    assert coords == etimmi.BUILDING_COORDS["Harjun stadion"]
     assert pitches["1"]["lat"] is None

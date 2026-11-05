@@ -51,6 +51,14 @@ def test_bookings_filters_to_requested_week(client, snapshot):
     assert labels(client.get("/api/bookings?week=2")) == []
 
 
+def test_stale_snapshot_coordinates_are_replaced(client, snapshot):
+    data = json.loads(snapshot.read_text(encoding="utf-8"))
+    data["pitches"]["7982"].update(lat=1.0, lng=2.0)
+    snapshot.write_text(json.dumps(data), encoding="utf-8")
+    pitch = client.get("/api/bookings").get_json()["pitches"]["7982"]
+    assert (pitch["lat"], pitch["lng"]) == etimmi.BUILDING_COORDS["Harjun stadion"]
+
+
 def test_week_param_is_clamped_and_sanitised(client, snapshot):
     assert client.get("/api/bookings?week=99").get_json()["weekOffset"] == pitcher.MAX_WEEK
     assert client.get("/api/bookings?week=-99").get_json()["weekOffset"] == pitcher.MIN_WEEK
