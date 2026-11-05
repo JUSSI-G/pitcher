@@ -8,6 +8,10 @@ let userLng    = null;
 let weekOffset = 0;
 let weekSearch = "";
 let findSearch = "";
+let weekDates  = [];
+let mapDay     = null;
+let map        = null;
+let mapMarkers = [];
 
 const PITCH_GROUPS = [
   { full: "7963", halves: ["7965", "7966"] },
@@ -53,6 +57,9 @@ function mergeBookings(a, b) {
   return [...a, ...extra];
 }
 
+
+const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, c => ESC[c]); }
 
 function localHour(ms) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -180,6 +187,8 @@ function switchTab(tab, el) {
   document.getElementById("weekView").style.display = tab === "week" ? "" : "none";
   document.getElementById("weekNav").style.display  = tab === "week" ? "" : "none";
   document.getElementById("findView").style.display = tab === "find" ? "" : "none";
+  document.getElementById("mapView").style.display  = tab === "map"  ? "" : "none";
+  if (tab === "map") showMap();
 }
 
 function renderWeekNav() {
@@ -218,10 +227,13 @@ function buildWeekView(dates) {
       <div id="board"></div>
     </div>`;
   weekSearch = "";
+  weekDates = dates;
+  if (!mapDay || !dates.includes(mapDay)) mapDay = activeDay;
   document.getElementById("weekNav").style.display = "";
   renderWeekNav();
   renderDayTabs(dates);
   renderWeek();
+  if (map) renderMap();
 }
 function dayChipLabel(d) {
   const dt = new Date(d + "T12:00:00Z");
@@ -302,7 +314,7 @@ function renderBoard() {
       const row = document.createElement("div"); row.className = "pitch-row";
       row.onclick = () => showPitchSchedule(pid, activeDay);
       const nc  = document.createElement("div"); nc.className = "pitch-name";
-      nc.innerHTML = `<span>${info.name}</span><span class="free-label${free === 0 ? " none" : ""}">${fStr}</span>`;
+      nc.innerHTML = `<span>${esc(info.name)}</span><span class="free-label${free === 0 ? " none" : ""}">${fStr}</span>`;
       const tl = document.createElement("div");
       tl.className = "timeline" + (free === 0 ? " no-free" : "");
       if (isToday && nowH >= DAY_START && nowH <= DAY_END) {
@@ -316,7 +328,7 @@ function renderBoard() {
         const bl = document.createElement("div"); bl.className = "booked-block";
         bl.style.left = l.toFixed(2)+"%"; bl.style.right = r.toFixed(2)+"%";
         bl.title = `${fmtTime(b.startMs)}–${fmtTime(b.endMs)}: ${b.label}`;
-        bl.innerHTML = `<span class="blabel">${b.label}</span>`;
+        bl.innerHTML = `<span class="blabel">${esc(b.label)}</span>`;
         tl.appendChild(bl);
       }
       if (slots.length > 0) {
@@ -434,16 +446,120 @@ function showResults(dateKey, targetHour) {
           ${dist}
           <div class="result-body">
             <div class="result-head">
-              <span class="result-name">${entry.info.name}</span>
+              <span class="result-name">${esc(entry.info.name)}</span>
               ${entry.freeNow ? '<span class="badge-free">Free</span>' : ""}
             </div>
-            <div class="result-building">${entry.info.building}${entry.info.address ? " · " + entry.info.address : ""}</div>
+            <div class="result-building">${esc(entry.info.building)}${entry.info.address ? " · " + esc(entry.info.address) : ""}</div>
             <div class="result-slots">${pills || '<span class="no-results">No free slots around this time</span>'}</div>
           </div>
           <div class="result-chev">›</div>
         </div>`;
     }).join("") || '<div class="no-results">No pitches free around that time.</div>'}
   `;
+}
+
+/* ---------- map (Leaflet) ---------- */
+function venueAvailability(dateKey) {
+  const dayData = (allData._byDate || {})[dateKey] || findData[dateKey] || {};
+  const isToday = dateKey === localDateKey(Date.now());
+  const nowH = localHour(Date.now());
+  const venues = {};
+  for (const [pid, info] of Object.entries(allData.pitches)) {
+    if (info.lat == null || info.lng == null) continue;
+    if (!dayData[pid]) continue;
+    const bookings = effectiveBookings(pid, dayData);
+    const free = freeMinutes(bookings);
+    const freeNow = isToday && nowH >= DAY_START && nowH < DAY_END &&
+      !bookings.some(b => b.startHour <= nowH && b.endHour > nowH);
+    const v = venues[info.building] || (venues[info.building] =
+      { building: info.building, address: info.address, lat: info.lat, lng: info.lng, pitches: [] });
+    v.pitches.push({ pid, info, free, freeNow });
+  }
+  return Object.values(venues);
+}
+
+function showMap() {
+  if (!allData || !allData._byDate) return;
+  if (!mapDay || !weekDates.includes(mapDay)) {
+    const todayKey = localDateKey(Date.now());
+    mapDay = weekDates.includes(todayKey) ? todayKey : (activeDay || weekDates[0]);
+  }
+  renderMapDayTabs();
+  initMap();
+  renderMap();
+  setTimeout(() => map && map.invalidateSize(), 60);
+}
+
+function renderMapDayTabs() {
+  const el = document.getElementById("mapDayTabs");
+  if (!el) return;
+  el.innerHTML = weekDates.map(d => {
+    const { isToday, html } = dayChipLabel(d);
+    const cls = "day-tab" + (d === mapDay ? " active" : "") + (isToday ? " is-today" : "");
+    return `<button class="${cls}" onclick="setMapDay('${d}',this)">${html}</button>`;
+  }).join("");
+}
+
+function setMapDay(d, elBtn) {
+  mapDay = d;
+  document.querySelectorAll("#mapDayTabs .day-tab").forEach(t => t.classList.remove("active"));
+  elBtn.classList.add("active");
+  renderMap();
+}
+
+function initMap() {
+  if (map || typeof L === "undefined") return;
+  map = L.map("map", { scrollWheelZoom: false, zoomControl: true, attributionControl: true })
+    .setView([62.244, 25.75], 11);
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 16
+    }
+  ).addTo(map);
+}
+
+function renderMap() {
+  if (!map) return;
+  mapMarkers.forEach(m => map.removeLayer(m));
+  mapMarkers = [];
+  const venues = venueAvailability(mapDay);
+  const bounds = [];
+  for (const v of venues) {
+    const freeNow = v.pitches.filter(p => p.freeNow).length;
+    const freeLater = v.pitches.some(p => p.free > 0);
+    const color = freeNow > 0 ? "#34d27a" : freeLater ? "#ffcf4a" : "#6b7a71";
+    const count = freeNow > 0 ? freeNow : v.pitches.filter(p => p.free > 0).length;
+    const icon = L.divIcon({
+      className: "pitch-marker-wrap",
+      html: `<div class="pitch-marker" style="--mk:${color}">
+               <span class="mk-dot"></span><span class="mk-n">${count || "–"}</span>
+             </div>`,
+      iconSize: [44, 28], iconAnchor: [22, 28]
+    });
+    const marker = L.marker([v.lat, v.lng], { icon }).addTo(map);
+    const rows = v.pitches
+      .sort((a, b) => b.free - a.free)
+      .map(p => {
+        const h = Math.floor(p.free / 60), m = p.free % 60;
+        const fStr = p.free === 0 ? "full" : h > 0 ? `${h}h ${m}m` : `${m}m`;
+        return `<button class="pop-row${p.freeNow ? " is-free" : ""}"
+                  onclick="showPitchSchedule('${p.pid}','${mapDay}')">
+                  <span class="pop-name">${esc(p.info.name)}</span>
+                  <span class="pop-free${p.free === 0 ? " none" : ""}">${p.freeNow ? "now · " : ""}${fStr}</span>
+                </button>`;
+      }).join("");
+    marker.bindPopup(
+      `<div class="pop-head">${esc(v.building)}</div>
+       ${v.address ? `<div class="pop-addr">${esc(v.address)}</div>` : ""}
+       <div class="pop-list">${rows}</div>`,
+      { className: "pitch-popup", maxWidth: 260 }
+    );
+    mapMarkers.push(marker);
+    bounds.push([v.lat, v.lng]);
+  }
+  if (bounds.length) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13 });
 }
 
 function showPitchSchedule(pid, dateKey) {
@@ -477,7 +593,7 @@ function showPitchSchedule(pid, dateKey) {
     } else {
       return `<div class="schedule-slot booked">
         <span class="slot-time">${timeStr}</span>
-        <span class="slot-label">${s.label}</span>
+        <span class="slot-label">${esc(s.label)}</span>
       </div>`;
     }
   }).join("");
@@ -504,18 +620,26 @@ function showPitchSchedule(pid, dateKey) {
     <div class="modal">
       <div class="modal-header">
         <div>
-          <div class="modal-title">${info.name}</div>
-          <div class="modal-subtitle">${info.building}${info.address ? " · " + info.address : ""}</div>
+          <div class="modal-title">${esc(info.name)}</div>
+          <div class="modal-subtitle">${esc(info.building)}${info.address ? " · " + esc(info.address) : ""}</div>
         </div>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        <button class="modal-close" onclick="closeModal(this.closest('.modal-overlay'))" aria-label="Close">✕</button>
       </div>
       <div class="modal-date">${dateLabel}<span class="free-total">${freeStr}</span></div>
       <div class="modal-timeline">${bookedBlocks}${nowLine}</div>
       <div class="schedule-list">${slotRows}</div>
     </div>`;
 
-  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(overlay); });
+  const onKey = e => { if (e.key === "Escape") closeModal(overlay); };
+  overlay._onKey = onKey;
+  document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
+}
+
+function closeModal(overlay) {
+  if (overlay._onKey) document.removeEventListener("keydown", overlay._onKey);
+  overlay.remove();
 }
 
 loadData().catch(err => {

@@ -1,177 +1,58 @@
+"""Pitcher — Flask app serving Jyväskylä football pitch availability.
+
+Static mode (default) serves the committed ``static/bookings.json`` snapshot.
+Live mode (``PITCHER_LIVE=true``) scrapes eTimmi on demand with a short cache.
+"""
+
+from __future__ import annotations
+
+import json
 import os
 import time
-import json
-import requests
-from datetime import datetime, timedelta
+from pathlib import Path
+
 from flask import Flask, jsonify, render_template, request
 
+import etimmi
+
+STATIC_FILE = Path(__file__).parent / "static" / "bookings.json"
+CACHE_TTL_S = 30 * 60
+MIN_WEEK, MAX_WEEK = -1, 4
+
 app = Flask(__name__)
-
-URL = "https://etimmi.jyvaskyla.fi/WebTimmi"
-
-KNOWN_FOOTBALL_PITCH_IDS = [
-    7963, 7965, 7966, 7982, 8034, 8007, 8008, 8005, 4582, 4581, 4580, 7627,
-    8063, 6443, 6444, 6176, 8045, 8060, 7943, 4593, 4594, 4586, 4587, 4591,
-    7416, 8052, 8053, 8050, 4576, 4578, 4579, 4574, 4538, 4539, 4537, 8058,
-    7762, 7763, 7761, 7764, 7765, 7766, 7768, 7769, 7777, 7770,
-]
-
-BUILDING_COORDS = {
-    "Halssilan liikuntapuisto":    (62.237, 25.719),
-    "Harjun stadion":              (62.242, 25.742),
-    "Hipposhalli":                 (62.231, 25.726),
-    "Huhtahalli":                  (62.266, 25.706),
-    "Jyskän tekonurmi":            (62.222, 25.839),
-    "Keljonkankaan koulun kenttä": (62.209, 25.716),
-    "Korpilahden ulkoalueet":      (62.012, 25.551),
-    "Mankolan tekonurmikenttä":    (62.261, 25.732),
-    "Palokan liikuntapuisto":      (62.296, 25.680),
-    "Savulahti tekonurmi":         (62.255, 25.680),
-    "Säynätsalon urheilukenttä":   (62.143, 25.845),
-    "Tikkakosken tekonurmi":       (62.394, 25.686),
-    "Tikkakosken urheilukenttä":   (62.394, 25.686),
-    "Vaajakosken liikuntapuisto":  (62.235, 25.897),
-    "Vaajakummun pallokenttä":     (62.237, 25.878),
-    "Vehkahalli":                  (62.253, 25.759),
-    "Vehkalampi":                  (62.251, 25.756),
-    "Viitaniemen liikuntapuisto":  (62.249, 25.751),
-    "Lehtisaaren kenttä":          (62.147, 25.851),
-}
-
-_cache = {}
-CACHE_TTL = 30 * 60
-STATIC_FILE = os.path.join(os.path.dirname(__file__), "static", "bookings.json")
+_cache: dict[int, dict] = {}
 
 
-def get_session():
-    s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (pitcher-app)"
-    s.headers["X-Requested-With"] = "XMLHttpRequest"
-    s.headers["Referer"] = URL + "/menuAction.do?logicalForward=weekView"
-    return s
+def is_live() -> bool:
+    return os.environ.get("PITCHER_LIVE", "").lower() == "true"
 
 
-def extract_label(event_text_field):
-    parts = []
-    for item in (event_text_field or []):
-        if isinstance(item, dict):
-            parts.append(item.get("text") or item.get("value") or item.get("label") or "")
-        else:
-            parts.append(str(item))
-    return " ".join(p for p in parts if p) or "Booked"
+def parse_week(raw) -> int:
+    try:
+        week = int(raw)
+    except (TypeError, ValueError):
+        week = 0
+    return max(MIN_WEEK, min(MAX_WEEK, week))
 
 
-def is_filler(start_ms, end_ms, label):
-    start = datetime.fromtimestamp(start_ms / 1000)
-    end   = datetime.fromtimestamp(end_ms   / 1000)
-    return label == "Booked" and (
-        (start.hour == 0 and start.minute == 0) or
-        (end.hour   == 0 and end.minute   == 0)
-    )
-
-
-def fetch_bookings(week_offset=0):
-    session = get_session()
-    session.get(URL + "/login.do", params={
-        "adminAreaId": 5, "loginName": "GUEST4", "password": "GUEST4",
-        "langKey": "fi", "uInterfaceVersion": 21,
-    })
-
-    r = session.get(URL + "/getRoomPartsForCalendarAjax.do", params={
-        "actionCode": "getRoomPartInfos", "type": 0,
-        "ids": ",".join(str(i) for i in KNOWN_FOOTBALL_PITCH_IDS),
-        "_": int(time.time() * 1000),
-    })
-
-    pitches = {}
-    for room in r.json():
-        pid  = room.get("roomPartId")
-        name = room.get("roomPartName") or room.get("roomName") or ""
-        if not pid or not name:
-            continue
-        building = room.get("buildingName", "")
-        lat, lng = BUILDING_COORDS.get(building, (None, None))
-        pitches[pid] = {
-            "name":     name,
-            "building": building,
-            "address":  room.get("buildingAddress", ""),
-            "lat":      lat,
-            "lng":      lng,
-        }
-
-    today  = datetime.now()
-    monday = (today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)).replace(
-        hour=0, minute=0, second=0, microsecond=0)
-
-    bookings = []
-    seen     = set()
-
-    for day_index in range(7):
-        days_selected = [0] * 7
-        days_selected[day_index] = 1
-        structure = {
-            "referenceDateMills": int(monday.timestamp() * 1000),
-            "roomPartIds":        KNOWN_FOOTBALL_PITCH_IDS,
-            "daysSelected":       days_selected,
-            "viewType":           1,
-            "viewStartTime":      14400000,
-            "viewEndTime":        75600000,
-        }
-        session.get(URL + "/calendarAjax.do", params={
-            "actionCode": "updateCalendarData",
-            "structure":  json.dumps(structure),
-            "_":          int(time.time() * 1000),
-        })
-        raw = session.get(URL + "/calendarAjax.do", params={
-            "actionCode": "getEpisodes",
-            "_":          int(time.time() * 1000),
-        }).json()
-
-        for b in raw:
-            key = b.get("eventBookingId") or (b.get("roomPartId"), b.get("startDateInMills"))
-            if key in seen:
-                continue
-            seen.add(key)
-            pid      = b.get("roomPartId")
-            if pid not in pitches:
-                continue
-            start_ms = b.get("startDateInMills")
-            end_ms   = b.get("endDateInMills")
-            label    = extract_label(b.get("eventTextField", []))
-            if is_filler(start_ms, end_ms, label):
-                continue
-            bookings.append({"pitchId": pid, "startMs": start_ms, "endMs": end_ms, "label": label})
-
-        time.sleep(0.3)
-
-    return {"pitches": pitches, "bookings": bookings, "fetchedAt": int(time.time() * 1000)}
-
-
-def get_cached_data(week_offset=0):
-    now = time.time()
+def live_data(week_offset: int) -> dict:
     entry = _cache.get(week_offset)
-    if entry is None or (now - entry["fetched_at"]) > CACHE_TTL:
-        print(f"Fetching week offset {week_offset}...")
-        _cache[week_offset] = {
-            "data":       fetch_bookings(week_offset),
-            "fetched_at": now,
-        }
+    if entry is None or time.time() - entry["at"] > CACHE_TTL_S:
+        app.logger.info("Fetching eTimmi week offset %s", week_offset)
+        _cache[week_offset] = {"data": etimmi.fetch_snapshot(weeks=(week_offset,)),
+                               "at": time.time()}
     return _cache[week_offset]["data"]
 
 
-def get_static_data(week_offset=0):
+def static_data(week_offset: int, path: Path | None = None) -> dict | None:
+    path = path or STATIC_FILE
     try:
-        with open(STATIC_FILE, encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
-    today = datetime.now()
-    monday = (today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)).replace(
-        hour=0, minute=0, second=0, microsecond=0)
-    start_ms = int(monday.timestamp() * 1000)
-    end_ms = start_ms + 7 * 24 * 3600 * 1000
-    filtered = [b for b in data["bookings"] if start_ms <= b["startMs"] < end_ms]
-    return {**data, "bookings": filtered, "weekOffset": week_offset}
+    start_ms, end_ms = etimmi.week_range_ms(week_offset)
+    bookings = [b for b in data["bookings"] if start_ms <= b["startMs"] < end_ms]
+    return {**data, "bookings": bookings}
 
 
 @app.route("/")
@@ -181,26 +62,33 @@ def index():
 
 @app.route("/api/bookings")
 def bookings():
-    try:
-        week_offset = int(request.args.get("week", 0))
-    except (ValueError, TypeError):
-        week_offset = 0
-    week_offset = max(-1, min(4, week_offset))
+    week_offset = parse_week(request.args.get("week", 0))
 
-    if os.environ.get("PITCHER_LIVE", "").lower() == "true":
-        data = get_cached_data(week_offset)
-        return jsonify({
-            "pitches":    {str(k): v for k, v in data["pitches"].items()},
-            "bookings":   [{**b, "pitchId": str(b["pitchId"])} for b in data["bookings"]],
-            "fetchedAt":  data["fetchedAt"],
-            "weekOffset": week_offset,
-        })
+    if is_live():
+        try:
+            data = live_data(week_offset)
+        except Exception:  # upstream is flaky; never leak a stack trace
+            app.logger.exception("Live fetch failed")
+            return jsonify({"error": "Could not reach eTimmi right now"}), 502
+    else:
+        data = static_data(week_offset)
+        if data is None:
+            return jsonify({"error": "No data. Run pitch_scraper.py and commit bookings.json"}), 503
 
-    data = get_static_data(week_offset)
-    if data is None:
-        return jsonify({"error": "No data. Run pitch_scraper.py locally and push bookings.json"}), 503
-    return jsonify(data)
+    return jsonify({**data, "weekOffset": week_offset})
 
-    
+
+@app.route("/healthz")
+def healthz():
+    return {"ok": True, "mode": "live" if is_live() else "static"}
+
+
+@app.after_request
+def cache_headers(resp):
+    if request.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp
+
+
 if __name__ == "__main__":
     app.run(debug=True)

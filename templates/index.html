@@ -12,7 +12,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -42,10 +45,17 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/></svg>
     Find a slot
   </button>
+  <button class="main-tab" onclick="switchTab('map', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+    Map
+  </button>
 </nav>
 <div id="weekNav" class="week-nav" style="display:none;"></div>
 <div id="weekView">
-  <div class="loading"><div class="spinner"></div> Loading bookings…</div>
+  <div class="skeleton" aria-busy="true" aria-label="Loading bookings">
+    <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+    <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+  </div>
 </div>
 <div id="findView" style="display:none;">
   <div class="find-panel">
@@ -97,7 +107,19 @@
     </div>
   </div>
 </div>
+<div id="mapView" style="display:none;">
+  <div class="map-day-tabs" id="mapDayTabs"></div>
+  <div class="legend map-legend">
+    <span><i class="dot-swatch" style="background:var(--free)"></i>Free now</span>
+    <span><i class="dot-swatch" style="background:var(--gold)"></i>Free later</span>
+    <span><i class="dot-swatch" style="background:#6b7a71"></i>Fully booked</span>
+  </div>
+  <div class="map-wrap"><div id="map"></div></div>
+  <p class="map-hint">Tap a marker to see every pitch at that venue.</p>
+</div>
 <footer>Data from Jyväskylä eTimmi booking system</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
